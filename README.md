@@ -1,2 +1,3 @@
-# ComputeShaderFFT
-Fast Fourier Transform implementation in Unity3D
+# Fast Fourier Transform
+Implementation in Unity3D Compute Shaders
+
