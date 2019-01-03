@@ -1,4 +1,6 @@
-﻿#pragma kernel ConvertTexToComplex
+﻿#pragma kernel ComputeBitRevRow
+#pragma kernel ComputeBitRevCol
+#pragma kernel ConvertTexToComplex
 #pragma kernel ConvertComplexMagToTex
 #pragma kernel ConvertComplexMagToTexScaled
 #pragma kernel ConvertComplexPhaseToTex
@@ -22,11 +24,11 @@ struct Complex
 };
 
 int WIDTH;                              // power of 2
-StructuredBuffer<uint> BitRevRow;       // size of WIDTH
+RWStructuredBuffer<uint> BitRevRow;       // size of WIDTH
 StructuredBuffer<Complex> TwiddleRow;   // size of WIDTH / 2
 
 int HEIGHT;                             // power of 2
-StructuredBuffer<uint> BitRevCol;       // size of HEIGHT
+RWStructuredBuffer<uint> BitRevCol;       // size of HEIGHT
 StructuredBuffer<Complex> TwiddleCol;   // size of HEIGHT / 2
 
 int BUTTERFLY_STRIDE;                   // 2, 4, 8, 16, ..., up to WIDTH (or HEIGHT)
@@ -77,6 +79,35 @@ Complex ComplexConjugate(Complex a)
     b.real = a.real;
     b.imag = -a.imag;
     return b;
+}
+
+uint BitRevIndices(int n)
+{
+    int numBits = firstbithigh(n);
+    int orig = n;
+    uint reversed = 0;
+    for (int j = 0; j < numBits; ++j)
+    {
+        reversed <<= 1;
+        if ((orig & 1) != 0)
+        {
+            reversed |= 1;
+        }
+        orig >>= 1;
+    }
+    return reversed;
+}
+
+[numthreads(GROUP_SIZE_X, 1, 1)]
+void ComputeBitRevRow(uint3 id : SV_DispatchThreadID)
+{
+    BitRevRow[id.x] = BitRevIndices(WIDTH);
+}
+
+[numthreads(GROUP_SIZE_X, 1, 1)]
+void ComputeBitRevCol(uint3 id : SV_DispatchThreadID)
+{
+    BitRevCol[id.x] = BitRevIndices(HEIGHT);
 }
 
 /*
