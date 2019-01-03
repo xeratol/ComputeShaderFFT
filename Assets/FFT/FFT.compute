@@ -1,0 +1,285 @@
+﻿#pragma kernel ConvertTexToComplex
+#pragma kernel ConvertComplexMagToTex
+#pragma kernel ConvertComplexMagToTexScaled
+#pragma kernel ConvertComplexPhaseToTex
+#pragma kernel CenterComplex
+#pragma kernel ConjugateComplex
+#pragma kernel DivideComplexByDimensions
+#pragma kernel BitRevByRow
+#pragma kernel BitRevByCol
+#pragma kernel ButterflyByRow
+#pragma kernel ButterflyByCol
+
+#define GROUP_SIZE_X 16
+#define GROUP_SIZE_Y 16
+#define PI 3.14159265359f
+#define PI_2 1.57079632679f
+
+struct Complex
+{
+    float real;
+    float imag;
+};
+
+int WIDTH;                              // power of 2
+StructuredBuffer<uint> BitRevRow;       // size of WIDTH
+StructuredBuffer<Complex> TwiddleRow;   // size of WIDTH / 2
+
+int HEIGHT;                             // power of 2
+StructuredBuffer<uint> BitRevCol;       // size of HEIGHT
+StructuredBuffer<Complex> TwiddleCol;   // size of HEIGHT / 2
+
+int BUTTERFLY_STRIDE;                   // 2, 4, 8, 16, ..., up to WIDTH (or HEIGHT)
+
+// dimensions are WIDTH x HEIGHT
+Texture2D<float3> SrcTex;
+StructuredBuffer<Complex> Src;          // 1D buffer to represent 2D data
+RWTexture2D<float3> DstTex;
+RWStructuredBuffer<Complex> Dst;        // 1D buffer to represent 2D data
+
+Complex ComplexAdd(Complex a, Complex b)
+{
+    Complex sum;
+    sum.real = a.real + b.real;
+    sum.imag = a.imag + b.imag;
+    return sum;
+}
+
+Complex ComplexSub(Complex a, Complex b)
+{
+    Complex sum;
+    sum.real = a.real - b.real;
+    sum.imag = a.imag - b.imag;
+    return sum;
+}
+
+Complex ComplexMult(Complex a, Complex b)
+{
+    Complex prod;
+    prod.real = (a.real * b.real) - (a.imag * b.imag);
+    prod.imag = (a.real * b.imag) + (a.imag * b.real);
+    return prod;
+}
+
+float ComplexMagnitude(Complex a)
+{
+    return sqrt(a.real * a.real + a.imag * a.imag);
+}
+
+float ComplexPhase(Complex a)
+{
+    return atan2(a.imag, a.real);
+}
+
+Complex ComplexConjugate(Complex a)
+{
+    Complex b;
+    b.real = a.real;
+    b.imag = -a.imag;
+    return b;
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        SrcTex (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ConvertTexToComplex(uint3 id : SV_DispatchThreadID)
+{
+    float real = (SrcTex[id.xy].r + SrcTex[id.xy].g + SrcTex[id.xy].b) / 3.0f;
+    Dst[id.y * WIDTH + id.x].real = real;
+    Dst[id.y * WIDTH + id.x].imag = 0;
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        Src (read)
+        DstTex (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ConvertComplexMagToTex(uint3 id : SV_DispatchThreadID)
+{
+    float val = ComplexMagnitude(Src[id.y * WIDTH + id.x]);
+    DstTex[id.xy] = float3(val, val, val);
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        Src (read)
+        DstTex (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ConvertComplexMagToTexScaled(uint3 id : SV_DispatchThreadID)
+{
+    float val = ComplexMagnitude(Src[id.y * WIDTH + id.x]);
+    val = log10(val * 10.0 + 1) / 4;
+    DstTex[id.xy] = float3(val, val, val);
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        Src (read)
+        DstTex (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ConvertComplexPhaseToTex(uint3 id : SV_DispatchThreadID)
+{
+    float val = ComplexPhase(Src[id.y * WIDTH + id.x]);
+    val += PI_2;
+    val /= PI;
+    DstTex[id.xy] = float3(val, val, val);
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void CenterComplex(uint3 id : SV_DispatchThreadID)
+{
+    uint pos = id.y * (uint)WIDTH + id.x;
+    if ( ( ( id.x + id.y ) % 2 ) == 1)
+    {
+        Dst[pos].real = -Src[pos].real;
+        Dst[pos].imag = -Src[pos].imag;
+    }
+    else
+    {
+        Dst[pos].real = Src[pos].real;
+        Dst[pos].imag = Src[pos].imag;
+    }
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ConjugateComplex(uint3 id : SV_DispatchThreadID)
+{
+    uint pos = id.y * (uint)WIDTH + id.x;
+    Dst[pos] = ComplexConjugate(Src[pos]);
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        HEIGHT (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void DivideComplexByDimensions(uint3 id : SV_DispatchThreadID)
+{
+    uint pos = id.y * (uint)WIDTH + id.x;
+    float dimProd = (float)WIDTH * (float)HEIGHT;
+    Dst[pos].real = Src[pos].real / dimProd;
+    Dst[pos].imag = Src[pos].imag / dimProd;
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        BitRevRow (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void BitRevByRow(uint3 id : SV_DispatchThreadID)
+{
+    uint srcPos = id.y * (uint)WIDTH + BitRevRow[id.x];
+    uint dstPos = id.y * (uint)WIDTH + id.x;
+    Dst[dstPos] = Src[srcPos];
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        BitRevCol (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void BitRevByCol(uint3 id : SV_DispatchThreadID)
+{
+    uint srcPos = BitRevCol[id.y] * (uint)WIDTH + id.x;
+    uint dstPos =            id.y * (uint)WIDTH + id.x;
+    Dst[dstPos] = Src[srcPos];
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        BUTTERFLY_STRIDE (read)
+        TwiddleRow (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ButterflyByRow(uint3 id : SV_DispatchThreadID)
+{
+    const uint stride           = (uint)BUTTERFLY_STRIDE;
+    const uint grp              = id.x / stride;
+    const uint grpIdx           = id.x % stride;
+    const uint offset           = grp * stride;
+    const uint halfStride       = stride / 2;
+    const uint halfStrideIdx    = grpIdx % halfStride;
+
+    Complex a = Src[(id.y * (uint)WIDTH) + offset + halfStrideIdx];
+    Complex b = Src[(id.y * (uint)WIDTH) + offset + halfStride + halfStrideIdx];
+    Complex w = TwiddleRow[halfStrideIdx * (uint)WIDTH / stride];
+    Complex bw = ComplexMult(b, w);
+
+    uint dstPos = (id.y * (uint)WIDTH) + id.x;
+    if (grpIdx < halfStride)
+    {
+        Dst[dstPos] = ComplexAdd(a, bw);
+    }
+    else
+    {
+        Dst[dstPos] = ComplexSub(a, bw);
+    }
+}
+
+/*
+    Needs the following:
+        WIDTH (read)
+        HEIGHT (read)
+        BUTTERFLY_STRIDE (read)
+        TwiddleCol (read)
+        Src (read)
+        Dst (write)
+*/
+[numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
+void ButterflyByCol(uint3 id : SV_DispatchThreadID)
+{
+    const uint stride           = (uint)BUTTERFLY_STRIDE;
+    const uint grp              = id.y / stride;
+    const uint grpIdx           = id.y % stride;
+    const uint offset           = grp * stride;
+    const uint halfStride       = stride / 2;
+    const uint halfStrideIdx    = grpIdx % halfStride;
+
+    Complex a = Src[id.x + ( ( offset + halfStrideIdx ) * (uint)WIDTH )];
+    Complex b = Src[id.x + ( ( offset + halfStride + halfStrideIdx ) * (uint)WIDTH )];
+    Complex w = TwiddleCol[halfStrideIdx * (uint)HEIGHT / stride];
+    Complex bw = ComplexMult(b, w);
+
+    if (grpIdx < halfStride)
+    {
+        Dst[(id.y * (uint)WIDTH) + id.x] = ComplexAdd(a, bw);
+    }
+    else
+    {
+        Dst[(id.y * (uint)WIDTH) + id.x] = ComplexSub(a, bw);
+    }
+}
