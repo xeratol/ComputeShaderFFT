@@ -4,10 +4,10 @@ using UnityEngine.UI;
 public class TransformInfo : MonoBehaviour
 {
     [SerializeField]
-    private Transform _transform;
+    private Transform _transform = null;
 
     [SerializeField]
-    private Text _text;
+    private Text _text = null;
 
     [SerializeField]
     private float _maxWidth = 2;
