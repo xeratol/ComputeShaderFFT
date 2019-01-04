@@ -167,8 +167,9 @@ void ConvertComplexMagToTexScaled(uint3 id : SV_DispatchThreadID)
 void ConvertComplexPhaseToTex(uint3 id : SV_DispatchThreadID)
 {
     float val = ComplexPhase(Src[id.y * WIDTH + id.x]);
-    val += PI_2;
-    val /= PI;
+    //val += PI_2;
+    //val /= PI;
+    val = abs(val) / PI_2;
     DstTex[id.xy] = float3(val, val, val);
 }
 
