@@ -222,10 +222,10 @@ public class FFTComputeHelper
 
     private void InitTwiddleBuffers()
     {
-        _twiddleRow = new ComputeBuffer(_width / 2, sizeof(float) * 2);
+        _twiddleRow = CreateComplexBuffer(_width / 2);
         ComputeTwiddleFactors(_width, _twiddleRow);
 
-        _twiddleCol = new ComputeBuffer(_height / 2, sizeof(float) * 2);
+        _twiddleCol = CreateComplexBuffer(_height / 2);
         ComputeTwiddleFactors(_height, _twiddleCol);
     }
 
@@ -257,11 +257,9 @@ public class FFTComputeHelper
         return ans;
     }
 
-    private static ComputeBuffer CreateComplexBuffer(int width, int height)
+    private static ComputeBuffer CreateComplexBuffer(int width, int height = 1)
     {
-        ComputeBuffer buffer = new ComputeBuffer(width * height, sizeof(float) * 2, ComputeBufferType.Default);
-        //buffer.SetData(new SimpleComplex[width * height]);
-        return buffer;
+        return new ComputeBuffer(width * height, sizeof(float) * 2);
     }
 
     private static void SwapBuffers(ref ComputeBuffer a, ref ComputeBuffer b)
@@ -313,7 +311,7 @@ public class FFTComputeHelper
 
     private void BitRevByRow(ComputeBuffer src, ComputeBuffer dst)
     {
-        _shader.SetBuffer(_bitRevByRowKernel, "BitRevRow", _bitRevRow);
+        _shader.SetBuffer(_bitRevByRowKernel, "BitRevIndices", _bitRevRow);
         _shader.SetBuffer(_bitRevByRowKernel, "Src", src);
         _shader.SetBuffer(_bitRevByRowKernel, "Dst", dst);
         Dispatch(_bitRevByRowKernel);
@@ -321,7 +319,7 @@ public class FFTComputeHelper
 
     private void BitRevByCol(ComputeBuffer src, ComputeBuffer dst)
     {
-        _shader.SetBuffer(_bitRevByColKernel, "BitRevCol", _bitRevCol);
+        _shader.SetBuffer(_bitRevByColKernel, "BitRevIndices", _bitRevCol);
         _shader.SetBuffer(_bitRevByColKernel, "Src", src);
         _shader.SetBuffer(_bitRevByColKernel, "Dst", dst);
         Dispatch(_bitRevByColKernel);
@@ -330,7 +328,7 @@ public class FFTComputeHelper
     // Both src and dst will be modified
     private void ButterflyByRow(ref ComputeBuffer src, ref ComputeBuffer dst)
     {
-        _shader.SetBuffer(_butterflyByRowKernel, "TwiddleRow", _twiddleRow);
+        _shader.SetBuffer(_butterflyByRowKernel, "TwiddleFactors", _twiddleRow);
         var swapped = false;
         for (int stride = 2; stride <= _width; stride *= 2)
         {
@@ -350,7 +348,7 @@ public class FFTComputeHelper
     // Both src and dst will be modified
     private void ButterflyByCol(ref ComputeBuffer src, ref ComputeBuffer dst)
     {
-        _shader.SetBuffer(_butterflyByColKernel, "TwiddleCol", _twiddleCol);
+        _shader.SetBuffer(_butterflyByColKernel, "TwiddleFactors", _twiddleCol);
         var swapped = false;
         for (int stride = 2; stride <= _height; stride *= 2)
         {

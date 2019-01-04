@@ -23,17 +23,12 @@ struct Complex
     float imag;
 };
 
-int N;
-RWStructuredBuffer<uint> BitRevIndices; // size of N
-RWStructuredBuffer<Complex> TwiddleFactors; // size of N / 2
-
 int WIDTH;                              // power of 2
-StructuredBuffer<uint> BitRevRow;       // size of WIDTH
-StructuredBuffer<Complex> TwiddleRow;   // size of WIDTH / 2
-
 int HEIGHT;                             // power of 2
-StructuredBuffer<uint> BitRevCol;       // size of HEIGHT
-StructuredBuffer<Complex> TwiddleCol;   // size of HEIGHT / 2
+int N;                                  // either WIDTH or HEIGHT
+
+RWStructuredBuffer<uint> BitRevIndices;     // size of WIDTH or HEIGHT
+RWStructuredBuffer<Complex> TwiddleFactors; // size of half of WIDTH or HEIGHT
 
 int BUTTERFLY_STRIDE;                   // 2, 4, 8, 16, ..., up to WIDTH (or HEIGHT)
 
@@ -231,14 +226,14 @@ void DivideComplexByDimensions(uint3 id : SV_DispatchThreadID)
 /*
     Needs the following:
         WIDTH (read)
-        BitRevRow (read)
+        BitRevIndices (read)
         Src (read)
         Dst (write)
 */
 [numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
 void BitRevByRow(uint3 id : SV_DispatchThreadID)
 {
-    uint srcPos = id.y * (uint)WIDTH + BitRevRow[id.x];
+    uint srcPos = id.y * (uint)WIDTH + BitRevIndices[id.x];
     uint dstPos = id.y * (uint)WIDTH + id.x;
     Dst[dstPos] = Src[srcPos];
 }
@@ -246,15 +241,15 @@ void BitRevByRow(uint3 id : SV_DispatchThreadID)
 /*
     Needs the following:
         WIDTH (read)
-        BitRevCol (read)
+        BitRevIndices (read)
         Src (read)
         Dst (write)
 */
 [numthreads(GROUP_SIZE_X, GROUP_SIZE_Y, 1)]
 void BitRevByCol(uint3 id : SV_DispatchThreadID)
 {
-    uint srcPos = BitRevCol[id.y] * (uint)WIDTH + id.x;
-    uint dstPos =            id.y * (uint)WIDTH + id.x;
+    uint srcPos = BitRevIndices[id.y] * (uint)WIDTH + id.x;
+    uint dstPos =                id.y * (uint)WIDTH + id.x;
     Dst[dstPos] = Src[srcPos];
 }
 
@@ -262,7 +257,7 @@ void BitRevByCol(uint3 id : SV_DispatchThreadID)
     Needs the following:
         WIDTH (read)
         BUTTERFLY_STRIDE (read)
-        TwiddleRow (read)
+        TwiddleFactors (read)
         Src (read)
         Dst (write)
 */
@@ -278,7 +273,7 @@ void ButterflyByRow(uint3 id : SV_DispatchThreadID)
 
     Complex a = Src[(id.y * (uint)WIDTH) + offset + halfStrideIdx];
     Complex b = Src[(id.y * (uint)WIDTH) + offset + halfStride + halfStrideIdx];
-    Complex w = TwiddleRow[halfStrideIdx * (uint)WIDTH / stride];
+    Complex w = TwiddleFactors[halfStrideIdx * (uint)WIDTH / stride];
     Complex bw = ComplexMult(b, w);
 
     uint dstPos = (id.y * (uint)WIDTH) + id.x;
@@ -297,7 +292,7 @@ void ButterflyByRow(uint3 id : SV_DispatchThreadID)
         WIDTH (read)
         HEIGHT (read)
         BUTTERFLY_STRIDE (read)
-        TwiddleCol (read)
+        TwiddleFactors (read)
         Src (read)
         Dst (write)
 */
@@ -313,7 +308,7 @@ void ButterflyByCol(uint3 id : SV_DispatchThreadID)
 
     Complex a = Src[id.x + ( ( offset + halfStrideIdx ) * (uint)WIDTH )];
     Complex b = Src[id.x + ( ( offset + halfStride + halfStrideIdx ) * (uint)WIDTH )];
-    Complex w = TwiddleCol[halfStrideIdx * (uint)HEIGHT / stride];
+    Complex w = TwiddleFactors[halfStrideIdx * (uint)HEIGHT / stride];
     Complex bw = ComplexMult(b, w);
 
     if (grpIdx < halfStride)
