@@ -7,17 +7,13 @@ public class FFT : MonoBehaviour
     private FFTComputeHelper _helper;
 
     public Texture _source;
-    private RenderTexture _intermediateForward;
     private RenderTexture _finalForwardMagnitude;
     private RenderTexture _finalForwardPhase;
-    private RenderTexture _intermediateInverse;
     private RenderTexture _finalInverse;
 
     public Renderer _sourceRenderer;
-    public Renderer _intermediateForwardRenderer;
     public Renderer _finalForwardMagnitudeRenderer;
     public Renderer _finalForwardPhaseRenderer;
-    public Renderer _intermediateInverseRenderer;
     public Renderer _finalInverseRenderer;
 
     #region Unity Methods
@@ -44,11 +40,11 @@ public class FFT : MonoBehaviour
         _helper.Load(_source);
         _helper.RecenterData();
 
-        _helper.Forward(_intermediateForward);
+        _helper.Forward();
         _helper.GetMagnitudeSpectrumScaled(_finalForwardMagnitude);
         _helper.GetPhaseAngle(_finalForwardPhase);
 
-        _helper.Inverse(_intermediateInverse);
+        _helper.Inverse();
         _helper.GetMagnitudeSpectrum(_finalInverse);
     }
 
@@ -85,8 +81,8 @@ public class FFT : MonoBehaviour
         }
 
         if (_sourceRenderer == null ||
-            _intermediateForwardRenderer == null || _finalForwardMagnitudeRenderer == null ||
-            _intermediateInverseRenderer == null || _finalInverseRenderer == null)
+            _finalForwardMagnitudeRenderer == null ||
+            _finalInverseRenderer == null)
         {
             return false;
         }
@@ -99,19 +95,15 @@ public class FFT : MonoBehaviour
     private void InitRenderers()
     {
         _sourceRenderer.material.mainTexture = _source;
-        _intermediateForwardRenderer.material.mainTexture = _intermediateForward;
         _finalForwardMagnitudeRenderer.material.mainTexture = _finalForwardMagnitude;
         _finalForwardPhaseRenderer.material.mainTexture = _finalForwardPhase;
-        _intermediateInverseRenderer.material.mainTexture = _intermediateInverse;
         _finalInverseRenderer.material.mainTexture = _finalInverse;
     }
 
     private void InitRenderTextures()
     {
-        _intermediateForward = CreateRenderTexture(_source.width, _source.height);
         _finalForwardMagnitude = CreateRenderTexture(_source.width, _source.height);
         _finalForwardPhase = CreateRenderTexture(_source.width, _source.height);
-        _intermediateInverse = CreateRenderTexture(_source.width, _source.height);
         _finalInverse = CreateRenderTexture(_source.width, _source.height);
     }
     #endregion
@@ -119,9 +111,7 @@ public class FFT : MonoBehaviour
     #region Clean Up Methods
     private void DestroyRenderTextures()
     {
-        _intermediateForward.Release();
         _finalForwardMagnitude.Release();
-        _intermediateInverse.Release();
         _finalInverse.Release();
     }
     #endregion
