@@ -10,6 +10,8 @@ public class FFTComputeHelper
     private int _height;
 
     #region Kernel Handles
+    private int _computeBitRevIndicesKernel;
+    private int _computeTwiddleFactorsKernel;
     private int _convertTexToComplexKernel;
     private int _convertComplexMagToTexKernel;
     private int _convertComplexMagToTexScaledKernel;
@@ -73,8 +75,8 @@ public class FFTComputeHelper
 
     public void Init(int width, int height)
     {
-        if (FastFourierTransform.RoundUpPowerOf2((uint)width) != (uint)width ||
-            FastFourierTransform.RoundUpPowerOf2((uint)height) != (uint)height ||
+        if (RoundUpPowerOf2((uint)width) != (uint)width ||
+            RoundUpPowerOf2((uint)height) != (uint)height ||
             width < GROUP_SIZE_X || height < GROUP_SIZE_Y)
         {
             throw new System.Exception("Invalid Parameters");
@@ -194,6 +196,8 @@ public class FFTComputeHelper
     #region Init Methods
     private void GetKernelHandles()
     {
+        _computeTwiddleFactorsKernel = _shader.FindKernel("ComputeTwiddleFactors");
+        _computeBitRevIndicesKernel = _shader.FindKernel("ComputeBitRevIndices");
         _convertTexToComplexKernel = _shader.FindKernel("ConvertTexToComplex");
         _convertComplexMagToTexKernel = _shader.FindKernel("ConvertComplexMagToTex");
         _convertComplexMagToTexScaledKernel = _shader.FindKernel("ConvertComplexMagToTexScaled");
@@ -209,14 +213,20 @@ public class FFTComputeHelper
 
     private void InitBitRevBuffers()
     {
-        _bitRevRow = CreateBitRevBuffer((uint)_width);
-        _bitRevCol = CreateBitRevBuffer((uint)_height);
+        _bitRevRow = new ComputeBuffer(_width, sizeof(uint));
+        ComputeBitRevIndices(_width, _bitRevRow);
+
+        _bitRevCol = new ComputeBuffer(_height, sizeof(uint));
+        ComputeBitRevIndices(_height, _bitRevCol);
     }
 
     private void InitTwiddleBuffers()
     {
-        _twiddleRow = CreateTwiddleBuffer((uint)_width / 2);
-        _twiddleCol = CreateTwiddleBuffer((uint)_height / 2);
+        _twiddleRow = new ComputeBuffer(_width / 2, sizeof(float) * 2);
+        ComputeTwiddleFactors(_width, _twiddleRow);
+
+        _twiddleCol = new ComputeBuffer(_height / 2, sizeof(float) * 2);
+        ComputeTwiddleFactors(_height, _twiddleCol);
     }
 
     private void InitTempBuffers()
@@ -227,25 +237,24 @@ public class FFTComputeHelper
     #endregion
 
     #region Utility Methods
-    private static ComputeBuffer CreateTwiddleBuffer(uint halfN)
+    public static uint RoundUpPowerOf2(uint v)
     {
-        var twiddleRaw = FastFourierTransform.GenTwiddleFactors(halfN);
-        var twiddleArray = new ComplexF[halfN];
-        for (var i = 0; i < halfN; ++i)
+        uint ans = 1;
+        var numOnes = 0u;
+        while (v != 0)
         {
-            twiddleArray[i].real = (float)twiddleRaw[i].Real;
-            twiddleArray[i].imag = (float)twiddleRaw[i].Imaginary;
+            if ((v & 1) != 0)
+            {
+                ++numOnes;
+            }
+            v >>= 1;
+            ans <<= 1;
         }
-        ComputeBuffer twiddle = new ComputeBuffer((int)halfN, sizeof(float) * 2);
-        twiddle.SetData(twiddleArray);
-        return twiddle;
-    }
-
-    private static ComputeBuffer CreateBitRevBuffer(uint N)
-    {
-        ComputeBuffer bitRev = new ComputeBuffer((int)N, sizeof(uint));
-        bitRev.SetData(FastFourierTransform.GenBitReversal(N).ToArray());
-        return bitRev;
+        if (numOnes < 2)
+        {
+            ans >>= 1;
+        }
+        return ans;
     }
 
     private static ComputeBuffer CreateComplexBuffer(int width, int height)
@@ -266,7 +275,26 @@ public class FFTComputeHelper
     #region Shader Methods
     private void Dispatch(int kernelHandle)
     {
-        _shader.Dispatch(kernelHandle, _width / GROUP_SIZE_X, _height / GROUP_SIZE_Y, 1);
+        Dispatch(kernelHandle, _width / GROUP_SIZE_X, _height / GROUP_SIZE_Y);
+    }
+
+    private void Dispatch(int kernelHandle, int xGroups, int yGroups, int zGroups = 1)
+    {
+        _shader.Dispatch(kernelHandle, xGroups, yGroups, zGroups);
+    }
+
+    private void ComputeBitRevIndices(int N, ComputeBuffer bitRevIndices)
+    {
+        _shader.SetInt("N", N);
+        _shader.SetBuffer(_computeBitRevIndicesKernel, "BitRevIndices", bitRevIndices);
+        Dispatch(_computeBitRevIndicesKernel, N / GROUP_SIZE_X, 1);
+    }
+
+    private void ComputeTwiddleFactors(int N, ComputeBuffer twiddleFactors)
+    {
+        _shader.SetInt("N", N);
+        _shader.SetBuffer(_computeTwiddleFactorsKernel, "TwiddleFactors", twiddleFactors);
+        Dispatch(_computeTwiddleFactorsKernel, N / GROUP_SIZE_X, 1);
     }
 
     private void ConvertTexToComplex(Texture src, ComputeBuffer dst)

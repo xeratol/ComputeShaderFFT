@@ -1,10 +1,6 @@
 ﻿using System;
 using UnityEngine;
 
-#if UNITY_EDITOR
-using System.Diagnostics;
-#endif
-
 public class FFT : MonoBehaviour
 {
     public ComputeShader _shader;
@@ -48,29 +44,12 @@ public class FFT : MonoBehaviour
         _helper.Load(_source);
         _helper.RecenterData();
 
-#if UNITY_EDITOR
-        var sw = new Stopwatch();
-        sw.Start();
-#endif
-
         _helper.Forward(_intermediateForward);
         _helper.GetMagnitudeSpectrumScaled(_finalForwardMagnitude);
         _helper.GetPhaseAngle(_finalForwardPhase);
 
-#if UNITY_EDITOR
-        sw.Stop();
-        var numTicksSoFar = sw.ElapsedTicks;
-        sw.Start();
-#endif
-
         _helper.Inverse(_intermediateInverse);
         _helper.GetMagnitudeSpectrum(_finalInverse);
-
-#if UNITY_EDITOR
-        sw.Stop();
-        var totalTicks = sw.ElapsedTicks + numTicksSoFar;
-        UnityEngine.Debug.LogFormat("Elapsed Time: {0}s", (float)totalTicks / TimeSpan.TicksPerSecond);
-#endif
     }
 
     private void OnDestroy()
@@ -99,8 +78,8 @@ public class FFT : MonoBehaviour
             return false;
         }
 
-        if (FastFourierTransform.RoundUpPowerOf2((uint)_source.width) != (uint)_source.width ||
-            FastFourierTransform.RoundUpPowerOf2((uint)_source.height) != (uint)_source.height)
+        if (FFTComputeHelper.RoundUpPowerOf2((uint)_source.width) != (uint)_source.width ||
+            FFTComputeHelper.RoundUpPowerOf2((uint)_source.height) != (uint)_source.height)
         {
             return false;
         }
